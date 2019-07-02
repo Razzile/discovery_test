@@ -1,3 +1,4 @@
+#include "asio.hpp"
 #include "shared.h"
 #include <WinSock2.h>
 #include <conio.h>
@@ -10,71 +11,47 @@ DeviceInfo DeviceInfo::SystemInfo() {
   return DeviceInfo{name, "Windows", 1248};
 }
 
+void error(const std::string &err) {
+  std::cerr << "[Error] " << err << std::endl;
+  exit(1);
+}
+
 int main() {
-  WSADATA wsa_data;
-  WSAStartup(MAKEWORD(2, 2), &wsa_data);
+  asio::io_service io_service;
 
-  SOCKET sock;
-  sock = socket(AF_INET, SOCK_DGRAM, 0);
+  asio::ip::udp::endpoint local_endpoint{asio::ip::address_v4::any(),
+                                         BROADCAST_PORT};
+  asio::ip::udp::socket socket{io_service, local_endpoint};
 
-  char broadcast = '1';
+  socket.set_option(asio::ip::udp::socket::reuse_address(true));
+  socket.set_option(asio::socket_base::broadcast(true));
 
-  if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcast,
-                 sizeof(broadcast)) < 0) {
-    std::cout << "Error in setting Broadcast option";
-    closesocket(sock);
+  asio::ip::udp::endpoint sender_endpoint;
 
-    return 0;
+  DeviceInfo server_info;
+  // wait for new data
+  socket.receive_from(asio::buffer(&server_info, sizeof(server_info)),
+                      sender_endpoint);
+  server_info.set_ip(sender_endpoint.address().to_string());
+
+  std::cout << "Sending device info to "
+            << sender_endpoint.address().to_string() + ":" +
+                   std::to_string(sender_endpoint.port())
+            << std::endl;
+  DeviceInfo device_info = DeviceInfo::SystemInfo();
+  device_info.set_ip(local_endpoint.address().to_string());
+
+  try {
+    socket.send_to(asio::buffer(&device_info, sizeof(device_info)),
+                   sender_endpoint);
+  } catch (const asio::system_error &e) {
+    error("Could not send device info: " + std::string{e.what()});
   }
 
-  sockaddr_in recv_addr;
-  sockaddr_in send_addr;
-  int socklen = sizeof(recv_addr);
-
-  char buffer[128];
-  int recvlen = sizeof(buffer);
-
-  recv_addr.sin_family = AF_INET;
-  recv_addr.sin_port = htons(BROADCAST_PORT);
-  recv_addr.sin_addr.s_addr = INADDR_ANY;
-
-  if (bind(sock, (sockaddr *)&recv_addr, sizeof(recv_addr)) < 0) {
-    std::cout << "Error in binding: " << WSAGetLastError();
-    _getch();
-    closesocket(sock);
-
-    return 0;
-  }
-
-  /**
-   * We don't need to receive data from the server in this example, just send
-   * data back*/
-  recvfrom(sock, buffer, recvlen, 0, (sockaddr *)&send_addr, &socklen);
-
-  std::cout << "Received Message: " << buffer;
-  std::cout << "\n\n\tPress Any to send message";
-
-  DeviceInfo info = DeviceInfo::SystemInfo();
-  if (sendto(sock, (char *)&info, sizeof(info), 0, (sockaddr *)&send_addr,
-             sizeof(send_addr)) < 0) {
-    std::cout << "Error in Sending. " << WSAGetLastError();
-    std::cout << "Press any key to continue....";
-
-    _getch();
-    closesocket(sock);
-
-    return 0;
-  }
-
-  else {
-    std::cout << "READER sends the broadcast message Successfully";
-  }
-
-  std::cout << "\n\n\tpress any key to CONT...";
+  std::cout << "\n\nPress any key to continue...";
 
   _getch();
-  closesocket(sock);
-  WSACleanup();
+  socket.close();
 
   return 0;
 }
