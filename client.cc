@@ -3,11 +3,10 @@
 #include <conio.h>
 #include <iostream>
 
-
 DeviceInfo DeviceInfo::SystemInfo() {
   char name[32];
   DWORD size = 32;
-  GetComputerNameA(name, &size);
+  GetComputerNameExA(ComputerNamePhysicalDnsHostname, name, &size);
   return DeviceInfo{name, "Windows", 1248};
 }
 

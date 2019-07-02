@@ -4,11 +4,10 @@
 #include <iostream>
 #include <vector>
 
-
 DeviceInfo DeviceInfo::SystemInfo() {
   char name[32];
   DWORD size = 32;
-  GetComputerNameA(name, &size);
+  GetComputerNameExA(ComputerNamePhysicalDnsHostname, name, &size);
   return DeviceInfo{name, "Windows", 1248};
 }
 
@@ -68,7 +67,7 @@ int main() {
   for (const DeviceInfo &client : clients) {
     std::cout << "\n\tClient name: " << client.device_name
               << "\n\tClient system: " << client.device_system
-              << "\n\tClient port:" << client.port << std::endl;
+              << "\n\tClient port: " << client.port << std::endl;
   }
 
   std::cout << "\n\n\tpress any key to continue...";
